@@ -2,7 +2,7 @@
 > **Painel Integrado de Monitoramento, Alertas e Análise de Enchentes**  
 > *Projeto desenvolvido para a avaliação da Global Solution (GS)*
 
-O **URBAN-FLOW** é um sistema inteligente e integrado projetado para atuar no monitoramento ativo, previsão e resposta a enchentes e alagamentos urbanos. Ele consome dados de precipitação em tempo real de pontos vulneráveis específicos das cidades de **São Paulo** e **São José do Rio Preto**, cruzando esses dados meteorológicos com simulações de sensores IoT de nível de rios. 
+O **URBAN-FLOW** é um sistema inteligente e integrado projetado para atuar no monitoramento ativo, previsão e resposta a enchentes e alagamentos urbanos. Ele consome dados de precipitação em tempo real de pontos vulneráveis específicos da cidade de **São Paulo**, cruzando esses dados meteorológicos com simulações de sensores IoT de nível de rios. 
 
 Toda a arquitetura de dados segue o modelo dimensional **Snowflake (Floco de Neve)** no banco de dados **Supabase (PostgreSQL)**, e a visualização analítica é exposta em um dashboard interativo premium desenvolvido em **Streamlit**.
 
@@ -100,13 +100,13 @@ erDiagram
 O script de ETL (`ingest.py`) realiza um processo híbrido e sofisticado de captura e enriquecimento de dados:
 
 1. **Dados Meteorológicos Reais (Open-Meteo API)**:
-   * O script lê as latitudes/longitudes cadastradas de **10 bairros vulneráveis** de alta criticidade e faz requisições assíncronas à API pública.
+   * O script lê as latitudes/longitudes cadastradas de **5 bairros vulneráveis** de alta criticidade e faz requisições assíncronas à API pública.
    * Coleta dados horários históricos da última quinzena (360 medições de chuva por bairro).
    * Implementa **resiliência HTTP** com fallbacks seguros de rede (`0.0 mm`), garantindo que instabilidades na internet não quebrem o pipeline.
 2. **Simulação de Sensores IoT com Efeito Lag Hidrológico**:
    * O nível de resposta dos rios não é imediato ao cair da chuva. A simulação aplica física realista: a chuva das últimas 4 horas acumula e eleva o nível do rio de forma gradativa (atraso/lag hidrológico), criando correlações científicas perfeitas para visualização nos gráficos.
 3. **Cálculo de Alerta Crítico**:
-   * O status de perigo (`risco_enchente = True`) é acionado se a precipitação de uma hora ultrapassar **45 mm** ou se o nível d'água do rio ultrapassar o limite seguro do local (ex: **2,6 metros** para córregos/avenidas e **4,2 metros** para a Represa Municipal).
+   * O status de perigo (`risco_enchente = True`) é acionado se a precipitação de uma hora ultrapassar **45 mm** ou se o nível d'água do rio ultrapassar o limite seguro do local (ex: **2,6 metros** para avenidas e áreas comerciais inundáveis).
 
 ---
 
@@ -186,7 +186,7 @@ Abra o terminal do PowerShell na pasta do projeto `c:\projeto-gs` e siga os pass
 
 ### 3. Executando a Aplicação
 
-Com o ambiente ativado e as variáveis configuradas, inicie o dashboard diretamente (ele fará a sincronização inicial das 3.600 medições com a API automaticamente):
+Com o ambiente ativado e as variáveis configuradas, inicie o dashboard diretamente (ele fará a sincronização inicial de 1.800 medições com a API automaticamente):
 
 ```powershell
 python -m streamlit run app.py
@@ -205,7 +205,7 @@ Digite **`SIM`** na tela e pressione Enter. A integridade física das tabelas se
 
 ## 📍 Bairros Monitorados (Geolocalização Real)
 
-O sistema monitora **10 pontos geográficos críticos** de alta reincidência de alagamentos reais em São Paulo:
+O sistema monitora **5 pontos geográficos críticos** de alta reincidência de alagamentos reais em São Paulo:
 
 ### Cidade: São Paulo (SP)
 * **Butantã**: Região residencial e universitária suscetível a transbordamento.
@@ -213,10 +213,3 @@ O sistema monitora **10 pontos geográficos críticos** de alta reincidência de
 * **Ipiranga**: Região histórica afetada pelo escoamento pluvial inadequado.
 * **Pinheiros**: Área comercial adjacente ao Rio Pinheiros de extrema reincidência.
 * **Moema**: Concentração urbana e alagamentos frequentes na Av. Ibirapuera.
-
-### Cidade: São José do Rio Preto (SP)
-* **Av. Bady Bassitt**: Principal avenida comercial do vale central com histórico severo de enxurradas.
-* **Represa Municipal**: Ponto de contenção hídrica principal da cidade.
-* **Av. Alberto Andaló**: Eixo viário de escoamento central sujeito a inundações.
-* **Av. Murchid Homsi**: Ponto crítico sobre o leito do córrego da Canela.
-* **Av. Philadelpho G. Neto**: Eixo inferior sujeito a transbordamento rápido do Rio Preto.
