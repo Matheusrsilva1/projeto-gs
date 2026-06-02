@@ -16,7 +16,7 @@ load_dotenv()
 # CONFIGURAÇÃO DA PÁGINA STREAMLIT
 # ==============================================================================
 st.set_page_config(
-    page_title="HidroAlert - Monitoramento de Enchentes",
+    page_title="URBAN-FLOW - Monitoramento de Enchentes",
     page_icon="🌊",
     layout="wide",
     initial_sidebar_state="expanded"
@@ -25,86 +25,103 @@ st.set_page_config(
 # Estilo CSS Customizado para Design Premium (Glassmorphism e Cores Harmoniosas)
 st.markdown("""
 <style>
+    /* Importação do Google Fonts */
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@400;600;700;800&display=swap');
+
     /* Estilização Geral da Página */
     .stApp {
-        background-color: #0f121d;
+        background-color: #0b0e17;
         color: #f1f3f9;
+        font-family: 'Inter', sans-serif !important;
     }
     
     /* Títulos e Headers */
     h1, h2, h3 {
-        font-family: 'Outfit', 'Inter', sans-serif !important;
+        font-family: 'Outfit', sans-serif !important;
         font-weight: 700 !important;
-        background: linear-gradient(90deg, #38bdf8, #818cf8);
-        -webkit-background-clip: text;
-        -webkit-text-fill-color: transparent;
+        background: linear-gradient(135deg, #38bdf8 0%, #818cf8 100%) !important;
+        -webkit-background-clip: text !important;
+        -webkit-text-fill-color: transparent !important;
+        letter-spacing: -0.5px;
     }
     
-    /* Cartões Glassmorphism */
+    /* Cartões Glassmorphism Premium */
     .metric-card {
-        background: rgba(255, 255, 255, 0.03);
-        border: 1px solid rgba(255, 255, 255, 0.05);
-        border-radius: 12px;
-        padding: 20px;
+        background: rgba(30, 41, 59, 0.45);
+        border: 1px solid rgba(255, 255, 255, 0.08);
+        border-radius: 16px;
+        padding: 24px;
         text-align: center;
-        box-shadow: 0 4px 30px rgba(0, 0, 0, 0.2);
-        backdrop-filter: blur(5px);
-        -webkit-backdrop-filter: blur(5px);
-        transition: transform 0.3s ease;
+        box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
+        backdrop-filter: blur(12px);
+        -webkit-backdrop-filter: blur(12px);
+        transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1);
     }
     .metric-card:hover {
-        transform: translateY(-5px);
-        border-color: rgba(99, 102, 241, 0.4);
+        transform: translateY(-8px) scale(1.02);
+        border-color: rgba(56, 189, 248, 0.5);
+        box-shadow: 0 12px 40px rgba(56, 189, 248, 0.15);
     }
     .metric-title {
-        font-size: 0.9rem;
+        font-size: 0.85rem;
         text-transform: uppercase;
         color: #94a3b8;
         font-weight: 600;
-        margin-bottom: 10px;
+        letter-spacing: 1px;
+        margin-bottom: 8px;
     }
     .metric-value {
-        font-size: 2.2rem;
-        font-weight: 700;
+        font-family: 'Outfit', sans-serif !important;
+        font-size: 2.4rem;
+        font-weight: 800;
         margin: 5px 0;
+        color: #ffffff;
     }
     .metric-indicator {
-        font-size: 0.85rem;
-        font-weight: 500;
+        font-size: 0.8rem;
+        font-weight: 600;
         display: inline-block;
-        padding: 3px 10px;
+        padding: 4px 12px;
         border-radius: 20px;
-        margin-top: 5px;
+        margin-top: 8px;
+        border: 1px solid rgba(255, 255, 255, 0.1);
     }
     
-    /* Alertas */
+    /* Alertas Estilizados */
     .alert-normal {
-        background: rgba(16, 185, 129, 0.15);
-        color: #10b981;
-        border: 1px solid rgba(16, 185, 129, 0.3);
+        background: rgba(16, 185, 129, 0.12) !important;
+        color: #10b981 !important;
+        border: 1px solid rgba(16, 185, 129, 0.25) !important;
     }
     .alert-warning {
-        background: rgba(245, 158, 11, 0.15);
-        color: #f59e0b;
-        border: 1px solid rgba(245, 158, 11, 0.3);
+        background: rgba(245, 158, 11, 0.12) !important;
+        color: #f59e0b !important;
+        border: 1px solid rgba(245, 158, 11, 0.25) !important;
     }
     .alert-critical {
-        background: rgba(239, 68, 68, 0.15);
-        color: #ef4444;
-        border: 1px solid rgba(239, 68, 68, 0.3);
+        background: rgba(239, 68, 68, 0.12) !important;
+        color: #ef4444 !important;
+        border: 1px solid rgba(239, 68, 68, 0.25) !important;
         animation: pulse 2s infinite;
     }
     
-    /* Animação Pulsante para Alertas Críticos */
+    /* Animação Pulsante Suave (Ripple) para Alertas Críticos */
     @keyframes pulse {
-        0% { opacity: 1; }
-        50% { opacity: 0.6; }
-        100% { opacity: 1; }
+        0% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.4); }
+        70% { box-shadow: 0 0 0 10px rgba(239, 68, 68, 0); }
+        100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); }
     }
     
-    /* Barra lateral */
-    .css-1d391kg {
-        background-color: #161a2b !important;
+    /* Estilização da Barra Lateral (Sidebar) */
+    [data-testid="stSidebar"] {
+        background-color: #07090e !important;
+        border-right: 1px solid rgba(255, 255, 255, 0.05);
+    }
+    
+    /* Estilização de Elementos do Streamlit na Sidebar */
+    .stMultiSelect, .stDateInput {
+        background-color: rgba(30, 41, 59, 0.3) !important;
+        border-radius: 8px !important;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -114,6 +131,27 @@ st.markdown("""
 # ==============================================================================
 SUPABASE_URL = os.getenv("SUPABASE_URL")
 SUPABASE_KEY = os.getenv("SUPABASE_KEY")
+
+@st.cache_resource(show_spinner="Sincronizando dados meteorológicos com o Supabase...")
+def rodar_ingestao_automatica(url, key):
+    """Executa a ingestão de dados de clima da API e popula o Supabase apenas uma vez por ciclo do servidor."""
+    if url and key and "your-project-id" not in url:
+        try:
+            import sys
+            import logging
+            # Garante que o diretório do projeto esteja no path
+            sys.path.append(os.path.dirname(os.path.abspath(__file__)))
+            import ingest
+            
+            # Desativa os logs repetitivos do HTTP do Supabase/requests no Streamlit
+            logging.getLogger("httpx").setLevel(logging.WARNING)
+            logging.getLogger("httpcore").setLevel(logging.WARNING)
+            
+            ingest.main()
+            return True, "Base de dados atualizada em tempo real via Open-Meteo API!"
+        except Exception as e:
+            return False, f"Falha na sincronização automatizada: {e}"
+    return False, "Credenciais do Supabase ausentes ou inválidas."
 
 @st.cache_data(ttl=120)  # Cache de 2 minutos para performance
 def carregar_dados_supabase(url, key):
@@ -286,15 +324,23 @@ def gerar_dados_mock():
 # CARREGAMENTO DO DATASET PRINCIPAL
 # ==============================================================================
 st.sidebar.image("https://img.icons8.com/clouds/200/000000/flood.png", width=120)
-st.sidebar.markdown("<h2 style='text-align: center; margin-bottom: 0px;'>HidroAlert 🌊</h2>", unsafe_allow_html=True)
+st.sidebar.markdown("<h2 style='text-align: center; margin-bottom: 0px;'>URBAN-FLOW 🌊</h2>", unsafe_allow_html=True)
 st.sidebar.markdown("<p style='text-align: center; color: #94a3b8; font-size: 0.85rem;'>Global Solution - Monitoramento</p>", unsafe_allow_html=True)
 st.sidebar.divider()
 
 modo_demo = False
 df = None
 
-# Tentar carregar via Supabase
+# Tentar sincronizar e carregar via Supabase
 if SUPABASE_URL and SUPABASE_KEY and "your-project-id" not in SUPABASE_URL:
+    # 1. Executa a ingestão automática (uma única vez por ciclo de vida do servidor)
+    sucedido, status_msg = rodar_ingestao_automatica(SUPABASE_URL, SUPABASE_KEY)
+    if sucedido:
+        st.sidebar.success(f"✔️ Sincronização: {status_msg}")
+    else:
+        st.sidebar.warning(f"⚠️ {status_msg}")
+
+    # 2. Carrega os dados atualizados
     with st.spinner("Conectando ao banco de dados Supabase e baixando modelo Snowflake..."):
         df, erro = carregar_dados_supabase(SUPABASE_URL, SUPABASE_KEY)
         if erro:
@@ -316,7 +362,10 @@ st.sidebar.markdown("### 🔍 Filtros de Monitoramento")
 
 # Filtro de Cidades
 lista_cidades = sorted(list(df["cidade"].unique()))
-cidades_selecionadas = st.sidebar.multiselect("Cidades:", options=lista_cidades, default=lista_cidades)
+default_cidades = [c for c in ["São Paulo"] if c in lista_cidades]
+if not default_cidades and lista_cidades:
+    default_cidades = [lista_cidades[0]]
+cidades_selecionadas = st.sidebar.multiselect("Cidades:", options=lista_cidades, default=default_cidades)
 
 # Filtro de Bairros dinâmico com base nas Cidades Selecionadas
 df_filtrado_cidade = df[df["cidade"].isin(cidades_selecionadas)]
@@ -526,18 +575,16 @@ else:
                 showgrid=True,
                 gridcolor="rgba(255,255,255,0.05)",
                 tickfont=dict(color="#94a3b8"),
-                title="Cronologia das Leituras"
+                title=dict(text="Cronologia das Leituras")
             ),
             yaxis=dict(
-                title="Nível do Rio (Metros)",
-                titlefont=dict(color="#818cf8"),
+                title=dict(text="Nível do Rio (Metros)", font=dict(color="#818cf8")),
                 tickfont=dict(color="#818cf8"),
                 showgrid=True,
                 gridcolor="rgba(255,255,255,0.05)"
             ),
             yaxis2=dict(
-                title="Volume de Chuva (mm)",
-                titlefont=dict(color="#38bdf8"),
+                title=dict(text="Volume de Chuva (mm)", font=dict(color="#38bdf8")),
                 tickfont=dict(color="#38bdf8"),
                 showgrid=False
             )

@@ -2,7 +2,9 @@ import os
 import sys
 import logging
 import random
+import math
 import datetime
+import requests
 from dotenv import load_dotenv
 from supabase import create_client, Client
 
@@ -34,6 +36,51 @@ try:
 except Exception as e:
     logger.critical(f"Erro ao conectar ao Supabase: {e}")
     sys.exit(1)
+
+
+def fetch_chuva_openmeteo(latitude: float, longitude: float, dias: int = 15) -> dict:
+    """
+    Busca dados reais de precipitação horária da API Open-Meteo.
+    Retorna um dicionário no formato:
+        { "YYYY-MM-DDTHH:00": volume_mm_float, ... }
+
+    Parâmetros:
+        latitude  — latitude do ponto de monitoramento
+        longitude — longitude do ponto de monitoramento
+        dias      — quantos dias históricos buscar (padrão: 15, igual ao simulador)
+    """
+    url = "https://api.open-meteo.com/v1/forecast"
+    params = {
+        "latitude": latitude,
+        "longitude": longitude,
+        "hourly": "precipitation",
+        "past_days": dias,
+        "forecast_days": 0,          # não precisamos de previsão futura
+        "timezone": "America/Sao_Paulo"
+    }
+
+    try:
+        response = requests.get(url, params=params, timeout=15)
+        response.raise_for_status()
+        data = response.json()
+
+        times = data["hourly"]["time"]               # ex: ["2026-05-17T00:00", "2026-05-17T01:00", ...]
+        precip = data["hourly"]["precipitation"]     # ex: [0.0, 0.0, 2.3, 12.1, ...]
+
+        # Montar dicionário para lookup rápido: { timestamp_str: mm }
+        resultado = {}
+        for t, p in zip(times, precip):
+            resultado[t] = float(p) if p is not None else 0.0
+
+        logger.info(f"Open-Meteo: {len(resultado)} registros horários obtidos para ({latitude}, {longitude})")
+        return resultado
+
+    except requests.exceptions.Timeout:
+        logger.warning(f"Timeout ao consultar Open-Meteo para ({latitude}, {longitude}). Usando 0.0 como fallback.")
+        return {}
+    except requests.exceptions.RequestException as e:
+        logger.warning(f"Erro na requisição Open-Meteo: {e}. Usando 0.0 como fallback.")
+        return {}
 
 
 def seed_dim_cidades():
@@ -79,6 +126,18 @@ def seed_dim_bairros(cidades_map):
             "latitude": -23.5901, 
             "longitude": -46.6102
         },
+        {
+            "nome_bairro": "Pinheiros", 
+            "id_cidade": cidades_map["São Paulo"], 
+            "latitude": -23.5678, 
+            "longitude": -46.7011
+        },
+        {
+            "nome_bairro": "Moema", 
+            "id_cidade": cidades_map["São Paulo"], 
+            "latitude": -23.5987, 
+            "longitude": -46.6618
+        },
         # São José do Rio Preto
         {
             "nome_bairro": "Av. Bady Bassitt", 
@@ -97,6 +156,18 @@ def seed_dim_bairros(cidades_map):
             "id_cidade": cidades_map["São José do Rio Preto"], 
             "latitude": -20.8252, 
             "longitude": -49.3775
+        },
+        {
+            "nome_bairro": "Av. Murchid Homsi", 
+            "id_cidade": cidades_map["São José do Rio Preto"], 
+            "latitude": -20.8295, 
+            "longitude": -49.3685
+        },
+        {
+            "nome_bairro": "Av. Philadelpho G. Neto", 
+            "id_cidade": cidades_map["São José do Rio Preto"], 
+            "latitude": -20.8012, 
+            "longitude": -49.3731
         }
     ]
     
@@ -114,7 +185,7 @@ def seed_dim_fontes():
     """Popula a dimensão de fontes de dados (dim_fontes_dados) e retorna o mapeamento para IDs."""
     logger.info("Populando dim_fontes_dados...")
     fontes = [
-        {"nome_api": "Open-Meteo Weather API", "tipo_sensor": "Pluviômetro Virtual"},
+        {"nome_api": "Open-Meteo Weather API", "tipo_sensor": "Pluviômetro Meteorológico (ECMWF/NOAA)"},
         {"nome_api": "Telemetria IoT Municipal", "tipo_sensor": "Sensor Ultrassônico de Nível"},
         {"nome_api": "CEMADEN Nacional", "tipo_sensor": "Pluviômetro Físico de Alta Precisão"}
     ]
@@ -188,20 +259,39 @@ def simular_e_inserir_fatos(bairros_map, fontes_map, tempo_map, tempo_records):
     """Simula dados de chuva e rios e insere os registros correspondentes na tabela fato."""
     logger.info("Iniciando a simulação de medições ambientais (Tabela Fato)...")
     
-    # Criar um mapeamento rápido das fontes
-    id_fonte_pluviometro = fontes_map[("Open-Meteo Weather API", "Pluviômetro Virtual")]
-    id_fonte_sensor_rio = fontes_map[("Telemetria IoT Municipal", "Sensor Ultrassônico de Nível")]
+    # ------------------------------------------------------------------ #
+    # INTEGRAÇÃO OPEN-METEO: buscar dados reais de precipitação por bairro
+    # ------------------------------------------------------------------ #
+    # Mapeamento: nome_bairro -> coordenadas (deve estar alinhado com seed_dim_bairros)
+    COORDENADAS_BAIRROS = {
+        "Butantã":                {"latitude": -23.5714, "longitude": -46.7086},
+        "Marginal Tietê":         {"latitude": -23.5186, "longitude": -46.6433},
+        "Ipiranga":               {"latitude": -23.5901, "longitude": -46.6102},
+        "Pinheiros":              {"latitude": -23.5678, "longitude": -46.7011},
+        "Moema":                  {"latitude": -23.5987, "longitude": -46.6618},
+        "Av. Bady Bassitt":       {"latitude": -20.8122, "longitude": -49.3792},
+        "Represa Municipal":      {"latitude": -20.8197, "longitude": -49.3598},
+        "Av. Alberto Andaló":     {"latitude": -20.8252, "longitude": -49.3775},
+        "Av. Murchid Homsi":      {"latitude": -20.8295, "longitude": -49.3685},
+        "Av. Philadelpho G. Neto": {"latitude": -20.8012, "longitude": -49.3731},
+    }
+
+    logger.info("Buscando dados reais de precipitação na API Open-Meteo...")
+    dados_openmeteo = {}  # { nome_bairro: { "YYYY-MM-DDTHH:00": mm } }
+
+    for nome_bairro, coords in COORDENADAS_BAIRROS.items():
+        dados_openmeteo[nome_bairro] = fetch_chuva_openmeteo(
+            latitude=coords["latitude"],
+            longitude=coords["longitude"],
+            dias=15
+        )
+
+    logger.info("Dados reais da Open-Meteo carregados para todos os bairros.")
+    # ------------------------------------------------------------------ #
     
-    # Definindo picos de chuvas para criar dinâmicas de enchentes realistas nos bairros
-    # Mapeamos tempestades para criar picos de chuva
-    tempestades = [
-        # Tempestade 1 no dia (D - 12)
-        {"dia_offset": -12, "duracao_horas": 6, "volume_max_chuva": 65.0},
-        # Tempestade 2 no dia (D - 6)
-        {"dia_offset": -6, "duracao_horas": 8, "volume_max_chuva": 85.0},
-        # Tempestade 3 no dia (D - 1)
-        {"dia_offset": -1, "duracao_horas": 4, "volume_max_chuva": 55.0}
-    ]
+    # Criar um mapeamento rápido das fontes
+    id_fonte_pluviometro = fontes_map[("Open-Meteo Weather API", "Pluviômetro Meteorológico (ECMWF/NOAA)")]
+    id_fonte_sensor_rio = fontes_map[("Telemetria IoT Municipal", "Sensor Ultrassônico de Nível")]
     
     fatos_records = []
     
@@ -220,32 +310,20 @@ def simular_e_inserir_fatos(bairros_map, fontes_map, tempo_map, tempo_records):
         id_tempo = tempo_map[(data_str, hora_str[:8])]
         
         dt_atual = datetime.datetime.strptime(f"{data_str} {hora_str}", "%Y-%m-%d %H:%M:%S")
-        hoje = datetime.datetime.now()
         
         for bairro_nome, id_bairro in bairros_map.items():
-            # 1. Simulação da Chuva (mm)
-            chuva = 0.0
-            
-            # Verificar se estamos no meio de alguma tempestade
-            for temp in tempestades:
-                dia_tempestade = hoje + datetime.timedelta(days=temp["dia_offset"])
-                
-                # Se a data atual coincide com o dia da tempestade (mesmo dia e mês)
-                if dt_atual.date() == dia_tempestade.date():
-                    # E se a hora está dentro da janela da tempestade (ex: das 14h às 20h)
-                    janela_inicio = 14
-                    janela_fim = janela_inicio + temp["duracao_horas"]
-                    
-                    if janela_inicio <= dt_atual.hour < janela_fim:
-                        # Curva de chuva senoidal realista
-                        progresso = (dt_atual.hour - janela_inicio) / temp["duracao_horas"]
-                        import math
-                        chuva = temp["volume_max_chuva"] * math.sin(progresso * math.pi) + random.uniform(0, 5)
-                        chuva = max(0.0, round(chuva, 2))
-            
-            # Caso não seja dia de tempestade grande, adiciona pequenas garoas ocasionais
-            if chuva == 0.0 and random.random() < 0.05:
-                chuva = round(random.uniform(0.5, 8.0), 2)
+            # 1. Precipitação Real — Open-Meteo API
+            # Monta a chave no formato que a API retorna: "YYYY-MM-DT%H:00"
+            timestamp_api = dt_atual.strftime("%Y-%m-%dT%H:00")
+            chuva_real = dados_openmeteo.get(bairro_nome, {}).get(timestamp_api, None)
+
+            if chuva_real is not None:
+                # Dado real obtido da API
+                chuva = round(max(0.0, chuva_real), 2)
+            else:
+                # Fallback: caso o timestamp não exista nos dados da API
+                # (ex: horário futuro ou falha de rede), usa 0.0
+                chuva = 0.0
             
             # Armazenar histórico de chuva do bairro
             historico_chuva[bairro_nome].append(chuva)
