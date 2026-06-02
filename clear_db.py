@@ -66,19 +66,22 @@ def main():
         # A ordem aqui é CRÍTICA devido às restrições de Chaves Estrangeiras (FK - Foreign Keys)
         # Devemos apagar primeiro as tabelas filhas e depois as tabelas pais.
         
-        # 1. Apagar Fatos (fato_medicoes_chuva) -> Aponta para Bairros, Tempo e Fontes
+        # 1. Apagar Reports de Cidadãos -> Aponta para Bairros
+        limpar_tabela("reports_alagamento", chave_id="id")
+
+        # 2. Apagar Fatos (fato_medicoes_chuva) -> Aponta para Bairros, Tempo e Fontes
         limpar_tabela("fato_medicoes_chuva", chave_id="id")
         
-        # 2. Apagar Dimensão Bairros -> Aponta para Cidades
+        # 3. Apagar Dimensão Bairros -> Aponta para Cidades
         limpar_tabela("dim_bairros", chave_id="id_bairro")
         
-        # 3. Apagar Dimensão Cidades -> Não aponta para ninguém
+        # 4. Apagar Dimensão Cidades -> Não aponta para ninguém
         limpar_tabela("dim_cidades", chave_id="id_cidade")
         
-        # 4. Apagar Dimensão Tempo -> Não aponta para ninguém
+        # 5. Apagar Dimensão Tempo -> Não aponta para ninguém
         limpar_tabela("dim_tempo", chave_id="id_tempo")
         
-        # 5. Apagar Dimensão Fontes de Dados -> Não aponta para ninguém
+        # 6. Apagar Dimensão Fontes de Dados -> Não aponta para ninguém
         limpar_tabela("dim_fontes_dados", chave_id="id_fonte")
         
         logger.info("=== BANCO DE DADOS LIMPO COM SUCESSO! A estrutura física das tabelas foi mantida. ===")

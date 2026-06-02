@@ -88,3 +88,20 @@ CREATE TABLE IF NOT EXISTS fato_medicoes_chuva (
 );
 
 COMMENT ON TABLE fato_medicoes_chuva IS 'Tabela fato central que armazena medições climáticas, níveis de rios e riscos.';
+
+-- ------------------------------------------------------------------------------
+-- 6. CANAL DO CIDADÃO: ALERTAS DE ALAGAMENTOS ENVIADOS POR CIDADÃOS
+-- ------------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS reports_alagamento (
+    id SERIAL PRIMARY KEY,
+    id_bairro INTEGER NOT NULL,
+    ponto_referencia VARCHAR(200) NOT NULL,
+    gravidade VARCHAR(30) NOT NULL, -- 'Leve', 'Moderada', 'Crítica (Transbordamento)'
+    descricao TEXT,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    
+    CONSTRAINT fk_report_bairro FOREIGN KEY (id_bairro) 
+        REFERENCES dim_bairros(id_bairro) ON DELETE CASCADE
+);
+
+COMMENT ON TABLE reports_alagamento IS 'Tabela que armazena alertas de alagamentos reportados de forma colaborativa por cidadãos.';

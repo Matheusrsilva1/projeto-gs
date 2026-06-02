@@ -81,17 +81,27 @@ erDiagram
         varchar tipo_sensor
         timestamp created_at
     }
+    reports_alagamento {
+        int id PK
+        int id_bairro FK
+        varchar ponto_referencia
+        varchar gravidade
+        text descricao
+        timestamp created_at
+    }
 
     fato_medicoes_chuva }o--|| dim_tempo : "refere-se a"
     fato_medicoes_chuva }o--|| dim_fontes_dados : "coletado por"
     fato_medicoes_chuva }o--|| dim_bairros : "ocorre em"
     dim_bairros }o--|| dim_cidades : "pertence a (ramificacao Snowflake)"
+    reports_alagamento }o--|| dim_bairros : "reportado em"
 ```
 
 ### Detalhamento das Relações
 1. **Fato Central (`fato_medicoes_chuva`)**: Armazena as medidas quantitativas (milímetros de chuva, altura do rio em metros e booleano de risco ativo) e chaves substitutas (FKs).
 2. **Ramificação Snowflake**: A tabela fato aponta para **`dim_bairros`** (contendo as coordenadas geográficas exatas para o mapa), a qual aponta e ramifica-se para **`dim_cidades`**. Isso impede a redundância de dados do estado/cidade para múltiplos bairros.
-3. **Chaves de Integridade**: Todas as tabelas dimensionais possuem constraints `UNIQUE` compostas de grão atômico. Isso garante que o pipeline de ETL realize inserções inteligentes do tipo `upsert` e evite duplicações.
+3. **Canal Comunitário (`reports_alagamento`)**: Conecta-se diretamente a **`dim_bairros`** para geolocalizar os relatos dos cidadãos, integrando dados empíricos com medições de sensores.
+4. **Chaves de Integridade**: Todas as tabelas dimensionais possuem constraints `UNIQUE` compostas de grão atômico. Isso garante que o pipeline de ETL realize inserções inteligentes do tipo `upsert` e evite duplicações.
 
 ---
 
@@ -114,12 +124,18 @@ O script de ETL (`ingest.py`) realiza um processo híbrido e sofisticado de capt
 
 A interface Streamlit do **URBAN-FLOW** foi projetada sob diretrizes modernas de design e experiência do usuário (UX):
 
+* **🌐 Navegação Multipáginas Integrada:** Menu de rádio lateral interativo que alterna instantaneamente entre o painel corporativo do centro de controle e o portal comunitário de alertas do cidadão.
 * **Visual Glassmorphism:** Cards de KPIs translúcidos com blur de fundo (`backdrop-filter: blur(12px)`), bordas finas com brilho suave e sombreamento flutuante.
 * **Efeitos de Hover Dinâmicos (Micro-animações):** Ao passar o mouse sobre os KPIs principais, eles realizam uma transição suave, elevando-se tridimensionalmente com um contorno e brilho neon azul.
 * **Efeito Pulsar Ripple:** O alerta de status crítico utiliza ondas expansivas de sombreamento vermelho para indicar perigo severo.
 * **Tipografia Personalizada:** Importação do Google Fonts utilizando **`Outfit`** (títulos robustos) e **`Inter`** (corpo ultra-legível).
 * **Mapa Temático Carto-Darkmatter:** Exibição espacial dos bairros monitorados com círculos de diâmetro proporcional ao nível dos rios e cores dinâmicas baseadas no status de perigo local (Vermelho: Crítico, Amarelo: Atenção, Verde: Normal).
 * **Gráfico Temporal de Eixo Duplo:** Exibe o volume de chuva em barras semi-transparentes de eixo direito e o nível do rio como uma linha fluida no eixo esquerdo, evidenciando o lag-response de escoamento.
+
+### 📢 Diferencial Inovador: Ciência Cidadã & Crowdsourcing
+O projeto **URBAN-FLOW** destaca-se pelo seu caráter **colaborativo e inovador (Smart Cities)**, integrando dados empíricos enviados de forma voluntária por cidadãos de áreas afetadas. 
+Através da segunda página da interface, qualquer morador pode relatar uma ocorrência de alagamento indicando o bairro afetado, um ponto de referência próximo, a gravidade visual (Leve, Moderada, Crítica) e detalhes extras.
+Estes chamados comunitários são salvos fisicamente no banco Supabase em tempo real e consolidados de forma estética na coluna **"Alertas Comunitários Recentes"** da tela principal, cruzando a percepção humana com a telemetria física dos sensores IoT.
 
 ### 🚀 Inicialização Automatizada e Otimizada
 O `app.py` utiliza o decorator **`@st.cache_resource`** do Streamlit. **Ao iniciar o dashboard pela primeira vez, o próprio app aciona a ingestão do `ingest.py` de forma totalmente transparente e em segundo plano.**
@@ -157,6 +173,7 @@ Nas interações seguintes dos usuários (filtros, cliques), o cache intercepta 
    ALTER TABLE dim_tempo DISABLE ROW LEVEL SECURITY;
    ALTER TABLE dim_fontes_dados DISABLE ROW LEVEL SECURITY;
    ALTER TABLE fato_medicoes_chuva DISABLE ROW LEVEL SECURITY;
+   ALTER TABLE reports_alagamento DISABLE ROW LEVEL SECURITY;
    ```
 
 ### 2. Configurando o Ambiente Local

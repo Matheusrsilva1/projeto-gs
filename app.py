@@ -217,6 +217,46 @@ def carregar_dados_supabase(url, key):
     except Exception as e:
         return None, f"Erro na conexão/consulta: {e}"
 
+
+@st.cache_data(ttl=15)  # Cache curto de 15 segundos para tempo real nos chamados
+def carregar_reports_supabase(url, key):
+    """Busca do Supabase todos os reports de alagamento enviados por cidadãos."""
+    from supabase import create_client
+    try:
+        supabase = create_client(url, key)
+        query_res = supabase.table("reports_alagamento").select(
+            "*, dim_bairros(*, dim_cidades(*))"
+        ).order("created_at", desc=True).execute()
+        return query_res.data, None
+    except Exception as e:
+        return None, str(e)
+
+
+def registrar_alerta_cidadao(url, key, bairro_nome, ponto_ref, gravidade, descricao):
+    """Registra uma nova ocorrência de alagamento enviada de forma colaborativa por um cidadão."""
+    from supabase import create_client
+    try:
+        supabase = create_client(url, key)
+        # Buscar ID do bairro pelo nome
+        bairro_res = supabase.table("dim_bairros").select("id_bairro").eq("nome_bairro", bairro_nome).execute()
+        if not bairro_res.data:
+            return False, f"Bairro '{bairro_nome}' não localizado no banco de dados."
+            
+        id_bairro = bairro_res.data[0]["id_bairro"]
+        
+        # Inserir o report
+        report_data = {
+            "id_bairro": id_bairro,
+            "ponto_referencia": ponto_ref,
+            "gravidade": gravidade,
+            "descricao": descricao
+        }
+        supabase.table("reports_alagamento").insert(report_data).execute()
+        return True, None
+    except Exception as e:
+        return False, str(e)
+
+
 # ==============================================================================
 # FALLBACK: GERADOR DE DADOS PARA MODO DEMONSTRAÇÃO
 # ==============================================================================
@@ -340,6 +380,13 @@ st.sidebar.markdown("<h2 style='text-align: center; margin-bottom: 0px;'>URBAN-F
 st.sidebar.markdown("<p style='text-align: center; color: #94a3b8; font-size: 0.85rem;'>Global Solution - Monitoramento</p>", unsafe_allow_html=True)
 st.sidebar.divider()
 
+# Navegação de Telas do Sistema
+opcao_menu = st.sidebar.radio(
+    "🌐 Navegação do Sistema:",
+    options=["📊 Painel de Monitoramento", "📢 Canal do Cidadão (Reportar)"]
+)
+st.sidebar.divider()
+
 modo_demo = False
 df = None
 
@@ -366,6 +413,96 @@ else:
 
 if modo_demo:
     st.info("💡 **Modo de Demonstração Local Ativo**: Exibindo dados simulados. Para conectar ao Supabase real, configure o arquivo `.env` com suas credenciais.")
+
+# Tentar carregar reports comunitários ativos
+reports_data = None
+if not modo_demo:
+    reports_data, _ = carregar_reports_supabase(SUPABASE_URL, SUPABASE_KEY)
+else:
+    if "reports_mock" not in st.session_state:
+        st.session_state["reports_mock"] = []
+    reports_data = st.session_state["reports_mock"]
+
+# ==============================================================================
+# PÁGINA 2: CANAL DO CIDADÃO (REPORTAR ALAGAMENTO) - RENDERIZAÇÃO E ST.STOP()
+# ==============================================================================
+if opcao_menu == "📢 Canal do Cidadão (Reportar)":
+    st.markdown("<h1>Canal de Segurança do Cidadão</h1>", unsafe_allow_html=True)
+    st.markdown("<p style='color: #94a3b8; font-size: 1.05rem;'>Espaço colaborativo e de crowdsourcing para reportar pontos de alagamento e inundações em tempo real nas ruas de São Paulo.</p>", unsafe_allow_html=True)
+    st.divider()
+    
+    st.markdown("### 📝 Enviar Relato de Alagamento")
+    
+    # Formulário principal
+    with st.form("form_report_alagamento"):
+        lista_bairros_cidade = sorted(list(df["bairro"].unique()))
+        bairro_report = st.selectbox("Selecione o Bairro Afetado:", options=lista_bairros_cidade)
+        
+        ponto_ref = st.text_input(
+            "Ponto de Referência Próximo:", 
+            placeholder="Ex: Próximo à estação de Metrô Pinheiros, ao lado do mercado Ipiranga X, altura do número 1200...",
+            max_chars=150
+        )
+        
+        gravidade = st.selectbox(
+            "Gravidade/Intensidade Visual do Alagamento:",
+            options=["Leve (Água acumulando na altura do meio-fio)", 
+                     "Moderada (Água cobrindo metade das rodas dos carros, via parcialmente intransitável)", 
+                     "Crítica (Transbordamento total da via, carros boiando, correnteza perigosa)"]
+        )
+        
+        descricao_report = st.text_area(
+            "Informações Adicionais / Detalhes (Opcional):",
+            placeholder="Relate as condições de tráfego local, bueiros entupidos de lixo ou riscos para pedestres...",
+            max_chars=500
+        )
+        
+        enviado = st.form_submit_button("📢 Enviar Alerta Comunitário")
+        
+        if enviado:
+            if not ponto_ref.strip():
+                st.error("⚠️ Por favor, informe um ponto de referência próximo para que a Defesa Civil possa localizar o chamado!")
+            else:
+                # Extrair o nível do texto de gravidade para gravação curta no banco
+                gravidade_curta = "Leve"
+                if "Moderada" in gravidade:
+                    gravidade_curta = "Moderada"
+                elif "Crítica" in gravidade:
+                    gravidade_curta = "Crítica"
+                
+                with st.spinner("Registrando alerta de segurança comunitária..."):
+                    if not modo_demo:
+                        sucedido, erro_msg = registrar_alerta_cidadao(
+                            SUPABASE_URL, SUPABASE_KEY, 
+                            bairro_report, ponto_ref, gravidade_curta, descricao_report
+                        )
+                    else:
+                        # Fallback modo demo - Salvar em session state
+                        st.session_state["reports_mock"].insert(0, {
+                            "id": int(random.uniform(1000, 9999)),
+                            "gravidade": gravidade_curta,
+                            "ponto_referencia": ponto_ref,
+                            "descricao": descricao_report,
+                            "created_at": datetime.datetime.now().strftime("%Y-%m-%dT%H:%M:%S+00:00"),
+                            "dim_bairros": {
+                                "nome_bairro": bairro_report,
+                                "dim_cidades": {
+                                    "nome_cidade": "São Paulo"
+                                }
+                            }
+                        })
+                        sucedido, erro_msg = True, None
+                        
+                if sucedido:
+                    st.success("🎉 **Alerta Enviado com Sucesso!** Muito obrigado pela sua colaboração cidadã. O seu chamado já está ativo e em tempo real no painel de monitoramento principal!")
+                    st.balloons()
+                else:
+                    st.error(f"❌ Falha ao registrar alerta no Supabase: {erro_msg}")
+                    
+    st.divider()
+    # Roda-pé institucional do Canal
+    st.markdown("<p style='text-align: center; color: #64748b; font-size: 0.8rem;'>Sistema desenvolvido para avaliação da Global Solution (GS). Crowdsourcing de dados e resiliência comunitária.</p>", unsafe_allow_html=True)
+    st.stop()
 
 # ==============================================================================
 # FILTROS DA BARRA LATERAL (SIDEBAR)
@@ -531,7 +668,7 @@ else:
             )
         )
         
-        st.plotly_chart(fig_mapa, use_container_width=True)
+        st.plotly_chart(fig_mapa, width="stretch")
 
     with layout_col2:
         st.markdown("### 📈 Correlação: Volume de Chuva vs. Nível do Rio")
@@ -602,34 +739,196 @@ else:
             )
         )
         
-        st.plotly_chart(fig_timeline, use_container_width=True)
+        st.plotly_chart(fig_timeline, width="stretch")
+        
+        with st.expander("🔬 A Ciência por trás do URBAN-FLOW: O Efeito Lag Hidrológico"):
+            st.markdown("""
+            O gráfico acima evidencia um fenômeno físico e científico real monitorado por engenheiros hidrólogos: o **Lag Hidrológico (Tempo de Resposta)** da bacia urbana.
+            
+            * **O que o gráfico demonstra?**
+              Observe que os picos das barras azuis (chuva intensa capturada em tempo real pela API Open-Meteo) ocorrem **algumas horas antes** do pico da linha roxa (nível máximo atingido pelo rio). 
+            
+            * **Como isso é modelado matematicamente?**
+              O sistema URBAN-FLOW não correlaciona chuva e nível de forma imediata (o que seria hidrologicamente incorreto). Ele calcula o nível do rio através do escoamento acumulado ponderado das **últimas 4 horas de precipitação**, simulando a velocidade real de escoamento da água pelas ruas, bueiros e encostas até alcançar o leito do rio.
+            
+            * **Por que isso é um diferencial?**
+              Essa modelagem dinâmica cria curvas de dados altamente compatíveis com bacias hidrográficas reais da capital paulista monitoradas pela Defesa Civil e pelo CEMADEN, permitindo demonstrar a **capacidade de alerta preventivo** do sistema.
+            """)
 
     # --------------------------------------------------------------------------
-    # 3. HISTÓRICO DE MEDIÇÕES E ALERTAS CRÍTICOS (DETALHADO)
+    # 3. PLANO DE AÇÃO, PREVENÇÃO E CONTINGÊNCIA (DINÂMICO E INTERATIVO)
     # --------------------------------------------------------------------------
     st.divider()
-    st.markdown("### 📋 Registros de Medição Recentes")
+    st.markdown("### 🛡️ Plano de Ação, Prevenção e Contingência")
+    st.markdown("Recomendações e medidas preventivas sugeridas pelo sistema URBAN-FLOW com base no nível de alerta atual dos bairros.")
     
-    # Tabela com as leituras mais recentes para análise tabular
-    df_table = df_filtrado.sort_values("data_hora", ascending=False).head(20).copy()
+    # Criar abas para separar ações emergenciais e soluções de longo prazo
+    tab_emergencia, tab_infraestrutura = st.tabs([
+        "🚨 Ações de Contingência (Emergencial)", 
+        "🏗️ Melhorias de Infraestrutura (Longo Prazo)"
+    ])
     
-    # Formatação descritiva
-    df_table["Volume Chuva"] = df_table["volume_chuva_mm"].apply(lambda x: f"{x:.1f} mm")
-    df_table["Nível do Rio"] = df_table["nivel_rio_metros"].apply(lambda x: f"{x:.2f} m")
-    df_table["Status de Alerta"] = df_table["risco_enchente"].apply(lambda x: "🚨 CRÍTICO" if x else "✅ NORMAL")
-    df_table["Data/Hora"] = df_table["data_hora"].dt.strftime("%d/%m/%Y %H:%M")
+    with tab_emergencia:
+        # Seção dinâmica baseada no nível de risco atual detectado no topo
+        if tem_risco:
+            st.error("🚨 **ALERTA CRÍTICO ATIVO: Risco Alto de Alagamento Detectado!**")
+            
+            col_defesa, col_populacao = st.columns(2)
+            with col_defesa:
+                st.markdown("""
+                ##### 🏢 Ações para a Defesa Civil e Órgãos Públicos:
+                * **Bloqueio de Vias:** Fechar imediatamente o tráfego nos pontos críticos inundados (ex: Marginal Tietê, Ipiranga, Pinheiros).
+                * **Sistemas de Alerta:** Disparar sirenes locais e enviar alertas de emergência por SMS/WhatsApp para os residentes das áreas afetadas.
+                * **Equipes de Resgate:** Mobilizar equipes do Corpo de Bombeiros e Defesa Civil para prontidão de salvamento e evacuação preventiva.
+                * **Abrigos:** Ativar e preparar ginásios e abrigos municipais de emergência.
+                """)
+            with col_populacao:
+                st.markdown("""
+                ##### 🏠 Ações Recomendadas para a População Local:
+                * **Evite Deslocamentos:** Não saia de casa a menos que seja instruído por equipes de resgate. Nunca tente atravessar ruas alagadas (a pé ou de carro).
+                * **Proteção de Bens:** Suba móveis, eletrodomésticos e documentos importantes para os andares superiores de sua residência.
+                * **Desligue a Energia:** Corte a chave geral de eletricidade e o registro de gás para evitar curtos-circuitos e explosões.
+                * **Kit de Emergência:** Separe água potável, alimentos não perecíveis, lanternas, documentos e medicamentos de uso contínuo.
+                """)
+        elif nivel_rio_max > 2.2:
+            st.warning("⚠️ **ESTADO DE ATENÇÃO: Nível Hidrológico Elevado!**")
+            
+            col_defesa, col_populacao = st.columns(2)
+            with col_defesa:
+                st.markdown("""
+                ##### 🏢 Ações para a Defesa Civil e Órgãos Públicos:
+                * **Monitoramento Contínuo:** Intensificar a leitura dos sensores IoT em tempo real para os bairros em estado de atenção.
+                * **Limpeza Emergencial:** Realizar a desobstrução rápida de bueiros e grades de retenção nos pontos de escoamento principal.
+                * **Pré-Alerta:** Emitir boletim de atenção meteorológica para as comunidades próximas aos córregos.
+                """)
+            with col_populacao:
+                st.markdown("""
+                ##### 🏠 Ações Recomendadas para a População Local:
+                * **Acompanhamento:** Fique atento aos boletins oficiais de rádio, TV e internet sobre o avanço das chuvas na sua região.
+                * **Verificação Preventiva:** Cheque se ralos e bueiros residenciais estão limpos e desobstruídos.
+                * **Rotas de Fuga:** Planeje com sua família uma rota de fuga segura para áreas altas caso o nível do rio continue a subir de forma acelerada.
+                """)
+        else:
+            st.success("✅ **SITUAÇÃO NORMAL: Baixo Nível de Risco Hidrológico**")
+            st.markdown("""
+            * **Monitoramento Rotineiro:** O URBAN-FLOW está operando em regime estável de coleta. A Defesa Civil deve manter as rondas ordinárias de rotina.
+            * **Manutenção Preventiva:** Excelente janela de oportunidade para a limpeza e desassoreamento de córregos e galerias pluviais urbanas antes do próximo ciclo de tempestades.
+            """)
+            
+    with tab_infraestrutura:
+        st.markdown("##### 🏗️ Soluções Urbanas e Tecnológicas de Longo Prazo")
+        st.markdown("Medidas estruturais recomendadas pelo URBAN-FLOW para mitigar as enchentes de forma sustentável na cidade de São Paulo:")
+        
+        col_sbn, col_cinza, col_iot = st.columns(3)
+        
+        with col_sbn:
+            st.subheader("🌱 Soluções Baseadas na Natureza")
+            st.markdown("""
+            * **Jardins de Chuva:** Expandir áreas verdes rebaixadas e canteiros drenantes nas calçadas para reter e infiltrar a água da chuva direto no lençol freático, aliviando as galerias subterrâneas.
+            * **Parques Lineares:** Desenvolver parques e faixas de vegetação nativa nas várzeas dos rios (ex: Pinheiros e Tietê) para permitir o transbordamento natural seguro sem atingir áreas residenciais ou comerciais.
+            """)
+            
+        with col_cinza:
+            st.subheader("🧱 Infraestrutura Cinza")
+            st.markdown("""
+            * **Modernização de Piscinões:** Construir novos reservatórios de detenção subterrâneos ("piscinões") de alta capacidade nas bacias dos córregos mais críticos para armazenar a água nos picos de tempestade e escoá-la gradativamente.
+            * **Asfalto Permeável:** Adotar pavimentação porosa e blocos drenantes em estacionamentos públicos, calçadões e ciclovias para aumentar o coeficiente de infiltração do solo urbano.
+            """)
+            
+        with col_iot:
+            st.subheader("📡 Tecnologia e IoT")
+            st.markdown("""
+            * **Sensores de Bueiros Inteligentes:** Instalar grades com sensores ultrassônicos em bueiros para alertar automaticamente as subprefeituras quando o acúmulo de lixo atingir 75% da capacidade de vazão.
+            * **Modelagem Preditiva com IA:** Utilizar dados históricos acumulados no Supabase para treinar modelos de machine learning capazes de prever transbordamentos com até 2 horas de antecedência.
+            """)
+
+    # --------------------------------------------------------------------------
+    # 4. TABELAS DETALHADAS DE OCORRÊNCIAS (SENSORES VS. CIDADÃOS)
+    # --------------------------------------------------------------------------
+    st.divider()
     
-    df_display = df_table[["Data/Hora", "cidade", "bairro", "Volume Chuva", "Nível do Rio", "Status de Alerta", "fonte_dados", "tipo_sensor"]].rename(
-        columns={
-            "cidade": "Cidade",
-            "bairro": "Bairro",
-            "fonte_dados": "Origem da Leitura",
-            "tipo_sensor": "Sensor"
-        }
-    )
+    col_tabela_sensores, col_tabela_cidados = st.columns([3, 2])
     
-    st.dataframe(df_display, use_container_width=True, hide_index=True)
-    
+    with col_tabela_sensores:
+        st.markdown("### 📋 Medições dos Sensores IoT")
+        st.markdown("Últimas leituras consolidadas capturadas pelas estações telemétricas.")
+        
+        # Tabela com as leituras mais recentes para análise tabular
+        df_table = df_filtrado.sort_values("data_hora", ascending=False).head(20).copy()
+        
+        # Formatação descritiva
+        df_table["Volume Chuva"] = df_table["volume_chuva_mm"].apply(lambda x: f"{x:.1f} mm")
+        df_table["Nível do Rio"] = df_table["nivel_rio_metros"].apply(lambda x: f"{x:.2f} m")
+        df_table["Status de Alerta"] = df_table["risco_enchente"].apply(lambda x: "🚨 CRÍTICO" if x else "✅ NORMAL")
+        df_table["Data/Hora"] = df_table["data_hora"].dt.strftime("%d/%m/%Y %H:%M")
+        
+        df_display = df_table[["Data/Hora", "cidade", "bairro", "Volume Chuva", "Nível do Rio", "Status de Alerta", "fonte_dados", "tipo_sensor"]].rename(
+            columns={
+                "cidade": "Cidade",
+                "bairro": "Bairro",
+                "fonte_dados": "Origem da Leitura",
+                "tipo_sensor": "Sensor"
+            }
+        )
+        
+        st.dataframe(df_display, width="stretch", hide_index=True)
+        
+    with col_tabela_cidados:
+        st.markdown("### 📢 Alertas Comunitários Recentes")
+        st.markdown("Ocorrências e pontos de alagamento reportados diretamente por cidadãos.")
+        
+        if reports_data:
+            # Filtrar reports para mostrar apenas os correspondentes aos filtros de Bairros selecionados na sidebar
+            reports_filtrados = []
+            for rep in reports_data:
+                bairro_rep = rep.get("dim_bairros", {}).get("nome_bairro")
+                if bairro_rep in bairros_selecionados:
+                    reports_filtrados.append(rep)
+                    
+            if reports_filtrados:
+                # Mostrar os reports mais recentes em cartões com design glassmorphic customizado
+                # Limitar aos 5 reports mais recentes para não poluir
+                for rep in reports_filtrados[:5]:
+                    grav = rep["gravidade"]
+                    bairro_rep = rep.get("dim_bairros", {}).get("nome_bairro")
+                    ponto = rep["ponto_referencia"]
+                    desc = rep["descricao"] if rep["descricao"] else "Sem informações adicionais."
+                    
+                    # Tratar data
+                    try:
+                        dt_rep = pd.to_datetime(rep["created_at"]).strftime("%d/%m/%Y %H:%M")
+                    except:
+                        dt_rep = rep["created_at"]
+                        
+                    # Mapear cores do alerta do cidadão
+                    if grav == "Crítica":
+                        prefix = "🚨 CRÍTICO"
+                        cor_borda = "rgba(239, 68, 68, 0.4)"
+                        cor_texto = "#ef4444"
+                    elif grav == "Moderada":
+                        prefix = "⚠️ MODERADO"
+                        cor_borda = "rgba(245, 158, 11, 0.4)"
+                        cor_texto = "#f59e0b"
+                    else:
+                        prefix = "ℹ️ LEVE"
+                        cor_borda = "rgba(56, 189, 248, 0.4)"
+                        cor_texto = "#38bdf8"
+                        
+                    st.markdown(f"""
+                    <div style="background: rgba(30, 41, 59, 0.4); border: 1px solid {cor_borda}; border-radius: 12px; padding: 16px; margin-bottom: 12px; backdrop-filter: blur(5px);">
+                        <span style="font-size: 0.75rem; color: #94a3b8; float: right; margin-top: 2px;">🕒 {dt_rep}</span>
+                        <strong style="color: {cor_texto}; font-size: 0.9rem; font-family: 'Outfit', sans-serif;">{prefix} - Bairro: {bairro_rep}</strong><br>
+                        <div style="margin-top: 8px; font-size: 0.85rem; color: #f1f3f9;">📍 <strong>Ref:</strong> {ponto}</div>
+                        <div style="margin-top: 4px; font-size: 0.8rem; color: #94a3b8; font-style: italic;">"{desc}"</div>
+                    </div>
+                    """, unsafe_allow_html=True)
+            else:
+                st.info("💡 Nenhum chamado ativo enviado por cidadãos para a região selecionada nas últimas 24h.")
+        else:
+            st.info("💡 Nenhum chamado de alagamento ativo enviado por cidadãos no momento.")
+            
     st.divider()
     # Roda-pé institucional do Projeto
     st.markdown("<p style='text-align: center; color: #64748b; font-size: 0.8rem;'>Sistema desenvolvido para avaliação da Global Solution (GS). Arquitetura Snowflake no Supabase e visualizações no Streamlit.</p>", unsafe_allow_html=True)
+
+
