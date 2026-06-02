@@ -123,6 +123,18 @@ st.markdown("""
         background-color: rgba(30, 41, 59, 0.3) !important;
         border-radius: 8px !important;
     }
+    
+    /* Remover a faixa branca do cabeçalho superior do Streamlit */
+    header, [data-testid="stHeader"] {
+        background-color: rgba(0, 0, 0, 0) !important;
+        background: transparent !important;
+    }
+    
+    /* Reduzir o espaço superior sobressalente da página para visualização encostada */
+    .block-container {
+        padding-top: 2.5rem !important;
+        padding-bottom: 2rem !important;
+    }
 </style>
 """, unsafe_allow_html=True)
 
