@@ -8,6 +8,22 @@ Toda a arquitetura de dados segue o modelo dimensional **Snowflake (Floco de Nev
 
 ---
 
+## 💡 Como o projeto funciona? (Resumo em 1 Minuto)
+
+O funcionamento do **URBAN-FLOW** pode ser resumido de forma simples em uma jornada de dados de 4 passos:
+
+```mermaid
+flowchart LR
+    A["🌧️ 1. Coleta de Dados<br>O sistema busca dados reais de chuva na API Open-Meteo por bairro e simula os sensores IoT de nível dos rios."]
+    B["🧠 2. Processamento<br>Calcula a reação física: o rio sobe algumas horas após a chuva (efeito lag) e define alertas de risco ativos."]
+    C["💾 3. Banco de Dados<br>Salva tudo de forma organizada e limpa no banco Supabase (PostgreSQL) usando a modelagem Snowflake."]
+    D["📊 4. Dashboard Visual<br>Renderiza o mapa de calor dark, os KPIs premium com efeito vidro e os gráficos analíticos no Streamlit."]
+
+    A --> B --> C --> D
+```
+
+---
+
 ## 🛠️ Stack Tecnológica
 
 * **Banco de Dados (DWH):** Supabase (PostgreSQL 15) com RLS customizado e integridade física.
